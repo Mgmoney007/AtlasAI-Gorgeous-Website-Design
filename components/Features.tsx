@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { BarChart, Bar, AreaChart, Area, ResponsiveContainer, XAxis, Cell, Tooltip } from 'recharts';
-import { Layout, Target, Zap, Search, Filter, ArrowUpDown, ChevronDown } from 'lucide-react';
+import { Layout, Target, Zap, Search, Filter } from 'lucide-react';
 
 const velocityData = [
   { name: '10ms', val: 98 },
@@ -83,7 +83,7 @@ const AnimatedNumber: React.FC<{ value: number; duration?: number; suffix?: stri
 };
 
 type Category = 'All' | 'Technical' | 'Creative' | 'Strategic';
-type SortKey = 'priority' | 'impact' | 'alphabetical';
+
 
 interface FeatureData {
   id: string;
@@ -322,8 +322,7 @@ const FeatureCard: React.FC<{ feature: FeatureData; colorClasses: any }> = ({ fe
 
 const Features: React.FC = () => {
   const [filter, setFilter] = useState<Category>('All');
-  const [sort, setSort] = useState<SortKey>('priority');
-  const [isSortOpen, setIsSortOpen] = useState(false);
+
 
   const filteredAndSortedFeatures = useMemo(() => {
     let result = [...FEATURES_LIST];
@@ -332,14 +331,11 @@ const Features: React.FC = () => {
       result = result.filter(f => f.category === filter);
     }
 
-    result.sort((a, b) => {
-      if (sort === 'impact') return b.impactFactor - a.impactFactor;
-      if (sort === 'alphabetical') return a.title.localeCompare(b.title);
-      return a.priority - b.priority;
-    });
+    // Default sort by priority
+    result.sort((a, b) => a.priority - b.priority);
 
     return result;
-  }, [filter, sort]);
+  }, [filter]);
 
   const colorClasses = {
     lime: 'hover:border-[#BFF549]/60 hover:shadow-[0_0_80px_rgba(191,245,73,0.3)]',
@@ -363,52 +359,30 @@ const Features: React.FC = () => {
 
         <div className="flex flex-col md:flex-row items-center justify-center gap-6 mt-16">
           <div className="flex flex-wrap justify-center items-center gap-2 p-2 glass border border-zinc-800 rounded-2xl">
-            {(['All', 'Technical', 'Creative', 'Strategic'] as Category[]).map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={`px-8 py-3 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-500 ${filter === cat
-                  ? 'bg-[#BFF549] text-zinc-950 shadow-[0_10px_25px_rgba(191,245,73,0.3)]'
-                  : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
-                  }`}
-              >
-                {cat}
-              </button>
-            ))}
+            {(['All', 'Technical', 'Creative', 'Strategic'] as Category[]).map((cat) => {
+              const activeColors = {
+                'All': 'bg-purple-500 text-white shadow-[0_10px_25px_rgba(168,85,247,0.3)]',
+                'Technical': 'bg-[#BFF549] text-zinc-950 shadow-[0_10px_25px_rgba(191,245,73,0.3)]',
+                'Creative': 'bg-pink-500 text-white shadow-[0_10px_25px_rgba(236,72,153,0.3)]',
+                'Strategic': 'bg-blue-500 text-white shadow-[0_10px_25px_rgba(59,130,246,0.3)]',
+              };
+
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setFilter(cat)}
+                  className={`px-8 py-3 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-500 ${filter === cat
+                    ? activeColors[cat]
+                    : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
+                    }`}
+                >
+                  {cat}
+                </button>
+              )
+            })}
           </div>
 
-          <div className="relative group/sort">
-            <button
-              onClick={() => setIsSortOpen(!isSortOpen)}
-              className="flex items-center gap-4 px-8 py-4 glass border border-zinc-800 rounded-2xl text-[10px] font-black tracking-widest uppercase text-zinc-400 group-hover/sort:text-white group-hover/sort:border-zinc-700 transition-all duration-300"
-            >
-              <ArrowUpDown className="w-4 h-4 text-[#BFF549]" />
-              {sort === 'priority' ? 'Recommended' : sort === 'impact' ? 'Highest Impact' : 'Alphabetical'}
-              <ChevronDown className={`w-4 h-4 transition-transform duration-500 ${isSortOpen ? 'rotate-180' : ''}`} />
-            </button>
 
-            {isSortOpen && (
-              <div className="absolute top-full mt-3 right-0 w-56 glass border border-zinc-800 rounded-2xl overflow-hidden z-20 shadow-3xl animate-in fade-in slide-in-from-top-2 duration-300">
-                {[
-                  { key: 'priority', label: 'Recommended' },
-                  { key: 'impact', label: 'Highest Impact' },
-                  { key: 'alphabetical', label: 'Alphabetical' }
-                ].map((option) => (
-                  <button
-                    key={option.key}
-                    onClick={() => {
-                      setSort(option.key as SortKey);
-                      setIsSortOpen(false);
-                    }}
-                    className={`w-full text-left px-6 py-4 text-[10px] font-black tracking-widest uppercase transition-all ${sort === option.key ? 'bg-[#BFF549]/10 text-[#BFF549]' : 'text-zinc-500 hover:bg-zinc-800 hover:text-white'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 

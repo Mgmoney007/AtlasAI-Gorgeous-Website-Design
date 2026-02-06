@@ -492,6 +492,7 @@ const ScannerSection: React.FC = () => {
             particleCount = 400;
             velocities: Float32Array | null = null;
             alphas: Float32Array | null = null;
+            texture: THREE.CanvasTexture | null = null;
 
             constructor(canvas: HTMLCanvasElement) {
                 this.canvas = canvas;
@@ -545,6 +546,7 @@ const ScannerSection: React.FC = () => {
                 ctx.arc(half, half, half, 0, Math.PI * 2);
                 ctx.fill();
                 const texture = new THREE.CanvasTexture(canvas);
+                this.texture = texture;
                 texture.flipY = false;
 
                 for (let i = 0; i < this.particleCount; i++) {
@@ -646,6 +648,17 @@ const ScannerSection: React.FC = () => {
             destroy() {
                 if (this.renderer) {
                     this.renderer.dispose();
+                }
+                if (this.particles) {
+                    this.particles.geometry.dispose();
+                    if (Array.isArray(this.particles.material)) {
+                        this.particles.material.forEach(m => m.dispose());
+                    } else {
+                        (this.particles.material as THREE.Material).dispose();
+                    }
+                }
+                if (this.texture) {
+                    this.texture.dispose();
                 }
                 window.removeEventListener("resize", this.onWindowResize);
             }
@@ -750,7 +763,7 @@ const ScannerSection: React.FC = () => {
                 this.cardLine.addEventListener("touchstart", (e) => this.startDrag(e.touches[0] as unknown as MouseEvent), { passive: false });
                 document.addEventListener("touchmove", (e) => this.onDrag(e.touches[0] as unknown as MouseEvent), { passive: false });
                 document.addEventListener("touchend", this.endDrag);
-                this.cardLine.addEventListener("wheel", this.onWheel);
+                this.cardLine.addEventListener("wheel", this.onWheel, { passive: false });
                 this.cardLine.addEventListener("dragstart", (e) => e.preventDefault());
                 window.addEventListener("resize", () => { this.calculateDimensions(); });
             }
@@ -860,49 +873,66 @@ const ScannerSection: React.FC = () => {
 
             updateCardClipping() {
                 if (!this.scanner) return;
-                // Center of screen
                 const scannerX = window.innerWidth / 2;
                 const scannerWidth = 8;
                 const scannerLeft = scannerX - scannerWidth / 2;
                 const scannerRight = scannerX + scannerWidth / 2;
                 let anyScanningActive = false;
 
-                // We need to query wrappers from the line
+                // Separation of Read and Write phases to prevent layout thrashing
+                const updates: any[] = [];
                 const wrappers = this.cardLine.querySelectorAll(".card-wrapper");
+
+                // READ PHASE
                 wrappers.forEach((wrapper: any) => {
                     const rect = wrapper.getBoundingClientRect();
                     const cardLeft = rect.left;
                     const cardRight = rect.right;
                     const cardWidth = rect.width;
 
-                    const normalCard = wrapper.querySelector(".card-normal");
-                    const asciiCard = wrapper.querySelector(".card-ascii");
+                    const updateData = { wrapper, inside: false, styles: {} as any };
 
                     if (cardLeft < scannerRight && cardRight > scannerLeft) {
                         anyScanningActive = true;
+                        updateData.inside = true;
                         const scannerIntersectLeft = Math.max(scannerLeft - cardLeft, 0);
                         const scannerIntersectRight = Math.min(scannerRight - cardLeft, cardWidth);
 
                         const normalClipRight = (scannerIntersectLeft / cardWidth) * 100;
                         const asciiClipLeft = (scannerIntersectRight / cardWidth) * 100;
 
-                        normalCard.style.setProperty("--clip-right", `${normalClipRight}% `);
-                        asciiCard.style.setProperty("--clip-left", `${asciiClipLeft}% `);
+                        updateData.styles = {
+                            normalClipRight: `${normalClipRight}% `,
+                            asciiClipLeft: `${asciiClipLeft}% `
+                        };
 
+                        // Check attribute read? Attributes are fast, but let's just checking in write phase or here? 
+                        // hasAttribute doesn't usually cause reflow.
                         if (!wrapper.hasAttribute("data-scanned") && scannerIntersectLeft > 0) {
-                            wrapper.setAttribute("data-scanned", "true");
-                            // Removed scan-effect creation as requested
+                            updateData.styles.setScanned = true;
                         }
                     } else {
+                        updateData.inside = false;
                         if (cardRight < scannerLeft) {
-                            normalCard.style.setProperty("--clip-right", "100%");
-                            asciiCard.style.setProperty("--clip-left", "100%");
+                            updateData.styles = { normalClipRight: "100%", asciiClipLeft: "100%" };
                         } else if (cardLeft > scannerRight) {
-                            normalCard.style.setProperty("--clip-right", "0%");
-                            asciiCard.style.setProperty("--clip-left", "0%");
+                            updateData.styles = { normalClipRight: "0%", asciiClipLeft: "0%" };
                         }
-                        wrapper.removeAttribute("data-scanned");
+                        updateData.styles.removeScanned = true;
                     }
+                    updates.push(updateData);
+                });
+
+                // WRITE PHASE
+                updates.forEach(({ wrapper, inside, styles }) => {
+                    const normalCard = wrapper.querySelector(".card-normal");
+                    const asciiCard = wrapper.querySelector(".card-ascii");
+
+                    if (styles.normalClipRight !== undefined) normalCard.style.setProperty("--clip-right", styles.normalClipRight);
+                    if (styles.asciiClipLeft !== undefined) asciiCard.style.setProperty("--clip-left", styles.asciiClipLeft);
+
+                    if (styles.setScanned) wrapper.setAttribute("data-scanned", "true");
+                    if (styles.removeScanned) wrapper.removeAttribute("data-scanned");
                 });
 
                 this.scanner.setScanningActive(anyScanningActive);
